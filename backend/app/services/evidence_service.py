@@ -1,9 +1,10 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from app.db.models import Evidence
+from app.db.models import Evidence, CustodyEvent
 from app.schemas.evidence import EvidenceResponse
 from app.services.hashing_service import calculate_sha256
 from app.services.encryption_service import encryption_service
+from app.services.custody_service import custody_service
 from app.utils.file_utils import save_upload_file
 import datetime
 import os
@@ -21,10 +22,9 @@ def generate_evidence_id(db: Session) -> str:
     return f"EV-{year}-{str(count + 1).zfill(6)}"
 
 def create_evidence(db: Session, upload_file, uploaded_by: str) -> Evidence:
-    """Processes the upload, calculates hash, encrypts, and stores metadata."""
+    """Processes the upload, calculates hash, encrypts, and stores metadata with custody events."""
     original_filename = upload_file.filename
 
-    # Use a temporary directory for plaintext processing to ensure cleanup
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir) / original_filename
 
@@ -39,7 +39,7 @@ def create_evidence(db: Session, upload_file, uploaded_by: str) -> Evidence:
 
         # 3. Encrypt plaintext to final storage location
         stored_filename = f"{os.urandom(16).hex()}.enc"
-        upload_dir = Path("uploads")
+        upload_dir = Path("backend/uploads")
         upload_dir.mkdir(parents=True, exist_ok=True)
         stored_path = upload_dir / stored_filename
 
@@ -73,6 +73,13 @@ def create_evidence(db: Session, upload_file, uploaded_by: str) -> Evidence:
         db.add(db_evidence)
         db.commit()
         db.refresh(db_evidence)
+
+        # 6. Generate the chain of custody events for the upload process
+        custody_service.create_event(db, db_evidence, "EVIDENCE_CREATED", uploaded_by, f"Evidence record created for {original_filename}")
+        custody_service.create_event(db, db_evidence, "EVIDENCE_UPLOADED", uploaded_by, "Original plaintext evidence uploaded to secure vault")
+        custody_service.create_event(db, db_evidence, "HASH_GENERATED", "System", f"SHA-256 fingerprint generated: {sha256[:16]}...")
+        custody_service.create_event(db, db_evidence, "ENCRYPTION_COMPLETED", "System", f"Evidence encrypted using {encryption_service.algorithm}")
+
         return db_evidence
 
 def get_evidence_list(db: Session, page: int = 1, page_size: int = 20, status: str = None, search: str = None, evidence_type: str = None):
@@ -128,10 +135,21 @@ def verify_evidence_integrity(db: Session, evidence_id: str, verification_file) 
             os.remove(tmp_path)
 
     is_verified = current_hash == evidence.sha256
+    status = "verified" if is_verified else "tampered"
+
+    # Create a custody event for the verification attempt
+    custody_service.create_event(
+        db,
+        evidence,
+        "VERIFICATION_PERFORMED",
+        "System",
+        f"Integrity verification performed. Result: {status}",
+        metadata={"result": status, "current_hash": current_hash}
+    )
 
     return {
         "verified": is_verified,
-        "status": "verified" if is_verified else "tampered",
+        "status": status,
         "original_hash": evidence.sha256,
         "current_hash": current_hash,
         "message": "Evidence integrity verified successfully." if is_verified else "Evidence integrity verification failed. Hash mismatch detected."

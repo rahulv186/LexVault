@@ -75,3 +75,38 @@ async def verify_evidence(
     if result is None:
         raise HTTPException(status_code=404, detail="Evidence record not found")
     return result
+
+@router.get("/{evidence_id}/custody/", response_model=None)
+def get_evidence_custody(evidence_id: str, db: Session = Depends(get_db)):
+    from app.services.custody_service import custody_service
+    evidence = evidence_service.get_evidence_by_id(db, evidence_id)
+    if not evidence:
+        raise HTTPException(status_code=404, detail="Evidence record not found")
+
+    events = custody_service.get_custody_chain(db, evidence_id)
+
+    formatted_events = []
+    for e in events:
+        formatted_events.append({
+            "event_type": e.event_type,
+            "actor": e.actor,
+            "timestamp": e.timestamp.isoformat() if hasattr(e.timestamp, 'isoformat') else e.timestamp,
+            "description": e.description,
+            "previous_event_hash": e.previous_event_hash,
+            "event_hash": e.event_hash,
+            "metadata": e.metadata_json
+        })
+
+    return {
+        "evidence_id": evidence.evidence_id,
+        "events": formatted_events
+    }
+
+@router.post("/{evidence_id}/custody/verify/", response_model=None)
+def verify_custody_chain(evidence_id: str, db: Session = Depends(get_db)):
+    from app.services.custody_service import custody_service
+    result = custody_service.verify_chain(db, evidence_id)
+    if result.get("valid") is False and "message" in result and "not found" in result["message"]:
+        raise HTTPException(status_code=404, detail=result["message"])
+
+    return result
