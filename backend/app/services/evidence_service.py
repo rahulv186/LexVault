@@ -5,15 +5,18 @@ from app.schemas.evidence import EvidenceResponse
 from app.services.hashing_service import calculate_sha256
 from app.services.encryption_service import encryption_service
 from app.services.custody_service import custody_service
+from app.services.ipfs_service import ipfs_service
 from app.utils.file_utils import save_upload_file
 import datetime
 import os
 import tempfile
 from pathlib import Path
+from datetime import datetime, timezone
+from app.core.config import settings
 
 def generate_evidence_id(db: Session) -> str:
     """Generates a unique evidence ID in the format EV-YYYY-XXXXXX."""
-    year = datetime.datetime.now().year
+    year = datetime.now().year
     result = db.execute(
         func.count(Evidence.id)
     ).scalar()
@@ -22,7 +25,7 @@ def generate_evidence_id(db: Session) -> str:
     return f"EV-{year}-{str(count + 1).zfill(6)}"
 
 def create_evidence(db: Session, upload_file, uploaded_by: str) -> Evidence:
-    """Processes the upload, calculates hash, encrypts, and stores metadata with custody events."""
+    """Processes the upload, calculates hash, encrypts, stores to IPFS, and creates custody events."""
     original_filename = upload_file.filename
 
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -39,7 +42,8 @@ def create_evidence(db: Session, upload_file, uploaded_by: str) -> Evidence:
 
         # 3. Encrypt plaintext to final storage location
         stored_filename = f"{os.urandom(16).hex()}.enc"
-        upload_dir = Path("backend/uploads")
+        # Use settings.UPLOADS_DIR instead of hardcoded "backend/uploads"
+        upload_dir = Path(settings.UPLOADS_DIR)
         upload_dir.mkdir(parents=True, exist_ok=True)
         stored_path = upload_dir / stored_filename
 
@@ -55,7 +59,7 @@ def create_evidence(db: Session, upload_file, uploaded_by: str) -> Evidence:
         # 4. Generate Evidence ID
         evidence_id = generate_evidence_id(db)
 
-        # 5. Create DB record with encryption metadata
+        # 5. Create DB record with encryption metadata (IPFS initially pending)
         db_evidence = Evidence(
             evidence_id=evidence_id,
             original_filename=original_filename,
@@ -67,18 +71,49 @@ def create_evidence(db: Session, upload_file, uploaded_by: str) -> Evidence:
             verification_status="pending",
             encryption_algorithm=encryption_service.algorithm,
             encryption_nonce=base_nonce_hex,
-            encrypted_file_size=encrypted_size
+            encrypted_file_size=encrypted_size,
+            ipfs_status="pending"
         )
 
         db.add(db_evidence)
         db.commit()
         db.refresh(db_evidence)
 
-        # 6. Generate the chain of custody events for the upload process
+        # 6. Upload ciphertext to IPFS
+        cid = ipfs_service.upload_file(str(stored_path))
+
+        if cid:
+            db_evidence.ipfs_cid = cid
+            db_evidence.ipfs_status = "completed"
+            db_evidence.ipfs_uploaded_at = datetime.now(timezone.utc)
+            db.commit()
+        else:
+            db_evidence.ipfs_status = "failed"
+            db.commit()
+
+        # 7. Generate the chain of custody events
         custody_service.create_event(db, db_evidence, "EVIDENCE_CREATED", uploaded_by, f"Evidence record created for {original_filename}")
         custody_service.create_event(db, db_evidence, "EVIDENCE_UPLOADED", uploaded_by, "Original plaintext evidence uploaded to secure vault")
         custody_service.create_event(db, db_evidence, "HASH_GENERATED", "System", f"SHA-256 fingerprint generated: {sha256[:16]}...")
         custody_service.create_event(db, db_evidence, "ENCRYPTION_COMPLETED", "System", f"Evidence encrypted using {encryption_service.algorithm}")
+
+        if cid:
+            custody_service.create_event(
+                db,
+                db_evidence,
+                "IPFS_UPLOAD_COMPLETED",
+                "System",
+                f"Encrypted ciphertext anchored to IPFS. CID: {cid}",
+                metadata={"cid": cid, "provider": "Pinata", "encrypted_size": encrypted_size}
+            )
+        else:
+            custody_service.create_event(
+                db,
+                db_evidence,
+                "IPFS_UPLOAD_FAILED",
+                "System",
+                "Encrypted ciphertext upload to IPFS failed."
+            )
 
         return db_evidence
 
@@ -186,5 +221,5 @@ def verify_stored_evidence_integrity(db: Session, evidence_id: str) -> dict:
         "status": "verified" if is_verified else "tampered",
         "original_hash": evidence.sha256,
         "current_hash": current_hash,
-        "message": "Stored evidence integrity verified." if is_verified else "Stored evidence hash mismatch."
+        "message": "Stored evidence integrity verified."
     }

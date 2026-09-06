@@ -28,7 +28,7 @@ export const VerifyEvidence = () => {
     setError(null);
 
     try {
-      const res = await evidenceService.verifyEvidence({ id, file });
+      const res = await evidenceService.verifyEvidence(id, { file });
       setResult(res);
     } catch (error) {
       console.error(error);

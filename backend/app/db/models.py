@@ -22,6 +22,11 @@ class Evidence(Base):
     encryption_nonce = Column(String)
     encrypted_file_size = Column(BigInteger)
 
+    # IPFS Metadata
+    ipfs_cid = Column(String, index=True)
+    ipfs_uploaded_at = Column(DateTime(timezone=True))
+    ipfs_status = Column(String, server_default="pending")
+
     # Relationships
     custody_events = relationship("CustodyEvent", back_populates="evidence", cascade="all, delete-orphan")
 

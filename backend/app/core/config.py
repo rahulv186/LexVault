@@ -17,6 +17,9 @@ class Settings(BaseSettings):
 
     UPLOADS_DIR: str = "uploads"
 
+    # Pinata IPFS Credentials
+    PINATA_JWT: str = Field(default="", validation_alias="PINATA_JWT")
+
     # LEXVAULT_ENCRYPTION_KEY in .env
     raw_encryption_key: str = Field(
         default="",

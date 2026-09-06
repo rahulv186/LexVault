@@ -22,6 +22,9 @@ class EvidenceResponse(BaseModel):
     verification_status: str
     encryption_algorithm: Optional[str] = None
     encrypted_file_size: Optional[int] = None
+    ipfs_cid: Optional[str] = None
+    ipfs_uploaded_at: Optional[datetime] = None
+    ipfs_status: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

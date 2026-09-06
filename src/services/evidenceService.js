@@ -63,7 +63,7 @@ export const evidenceService = {
     const formData = new FormData();
     formData.append('file', file);
 
-    const response = await apiClient.post(`/api/evidence/${id}/verify/`, formData, {
+    const response = await apiClient.post(`/api/evidence/${encodeURIComponent(id)}/verify/`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },

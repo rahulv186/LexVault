@@ -22,6 +22,14 @@ export const EvidenceMetadata = ({ evidence }) => {
         <MetadataItem label="Current Status" value={evidence.verification_status} />
         <MetadataItem label="Encryption" value={evidence.encryption_algorithm || 'Not specified'} />
         <MetadataItem label="Encrypted Size" value={evidence.encrypted_file_size ? `${(evidence.encrypted_file_size / 1024).toFixed(2)} KB` : 'N/A'} />
+        <MetadataItem
+          label="IPFS Status"
+          value={evidence.ipfs_status === 'completed' ? 'Anchored' : evidence.ipfs_status === 'failed' ? 'Upload Failed' : 'Pending'}
+        />
+        <MetadataItem
+          label="IPFS CID"
+          value={evidence.ipfs_cid || 'Not anchored yet'}
+        />
       </div>
     </div>
   );
