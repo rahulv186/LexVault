@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-security-black text-gray-100 antialiased selection:bg-security-accent selection:text-security-black;
+  margin: 0;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* Custom scrollbar for the security look */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-security-black;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-security-gray-700 rounded-full hover:bg-security-gray-800 transition-colors;
+}
+
+.glass-card {
+  @apply bg-security-gray-900/50 backdrop-blur-md border border-security-gray-700/50 rounded-xl;
+}
+
+.security-border {
+  @apply border border-security-gray-700/50;
+}
