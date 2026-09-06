@@ -1,57 +1,34 @@
 import hashlib
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 from app.db.models import CustodyEvent, Evidence
 
+from app.db.models import CustodyEvent, Evidence
+from app.services.custody_hash import calculate_custody_hash
+
 class CustodyService:
-    def _calculate_event_hash(self, event_data: Dict[str, Any], previous_hash: Optional[str]) -> str:
-        """
-        Deterministically calculates the SHA-256 hash of an event.
-        """
-        # Canonical serialization: Sorted keys, stable separators
-        # Fields to hash: evidence_id, event_type, actor, timestamp, description, metadata, previous_event_hash
-
-        # Ensure metadata is a sorted JSON string if it's a dict
-        metadata_str = ""
-        if event_data.get("metadata"):
-            metadata_str = json.dumps(event_data["metadata"], sort_keys=True, separators=(",", ":"))
-
-        canonical_string = (
-            f"{event_data['evidence_id']}|"
-            f"{event_data['event_type']}|"
-            f"{event_data['actor']}|"
-            f"{event_data['timestamp']}|"
-            f"{event_data['description']}|"
-            f"{metadata_str}|"
-            f"{previous_hash or ''}"
-        )
-
-        return hashlib.sha256(canonical_string.encode('utf-8')).hexdigest()
-
     def create_event(self, db: Session, evidence: Evidence, event_type: str, actor: str, description: str, metadata: Optional[Dict[str, Any]] = None) -> CustodyEvent:
-        """
-        Creates a new custody event, linking it to the previous event's hash.
-        """
-        # Get the latest event for this evidence to link the hash
+        """Creates a new custody event, linking it to the previous event's hash."""
         last_event = db.query(CustodyEvent).filter(
             CustodyEvent.evidence_id == evidence.id
         ).order_by(CustodyEvent.id.desc()).first()
 
         previous_hash = last_event.event_hash if last_event else None
-        timestamp = datetime.utcnow().isoformat()
 
-        event_data = {
-            "evidence_id": evidence.evidence_id,
-            "event_type": event_type,
-            "actor": actor,
-            "timestamp": timestamp,
-            "description": description,
-            "metadata": metadata
-        }
+        # Use timezone-aware UTC datetime object
+        timestamp = datetime.now(timezone.utc)
 
-        event_hash = self._calculate_event_hash(event_data, previous_hash)
+        event_hash = calculate_custody_hash(
+            evidence_id=evidence.evidence_id,
+            event_type=event_type,
+            actor=actor,
+            timestamp=timestamp,
+            description=description,
+            metadata=metadata,
+            previous_event_hash=previous_hash
+        )
 
         new_event = CustodyEvent(
             evidence_id=evidence.id,
@@ -80,9 +57,7 @@ class CustodyService:
         ).order_by(CustodyEvent.id.asc()).all()
 
     def verify_chain(self, db: Session, evidence_id: str) -> Dict[str, Any]:
-        """
-        Verifies the integrity of the entire custody chain.
-        """
+        """Verifies the integrity of the entire custody chain."""
         evidence = db.query(Evidence).filter(Evidence.evidence_id == evidence_id).first()
         if not evidence:
             return {"valid": False, "message": "Evidence not found."}
@@ -93,23 +68,15 @@ class CustodyService:
 
         prev_hash = None
         for i, event in enumerate(events):
-            # Recompute the hash of the event
-            event_data = {
-                "evidence_id": evidence.evidence_id,
-                "event_type": event.event_type,
-                "actor": event.actor,
-                "timestamp": event.timestamp.isoformat() if hasattr(event.timestamp, 'isoformat') else event.timestamp,
-                "description": event.description,
-                "metadata": event.metadata_json
-            }
-
-            # Note: we must use the exact same timestamp string as stored in the DB
-            # If timestamp was converted to datetime object, we need the original string.
-            # Since we stored it as DateTime in DB, we need to be careful about precision.
-            # For this milestone, we'll assume the timestamp stored is what we use.
-            # However, to be truly deterministic, we should store the canonical timestamp string.
-
-            actual_hash = self._calculate_event_hash(event_data, prev_hash)
+            actual_hash = calculate_custody_hash(
+                evidence_id=evidence.evidence_id,
+                event_type=event.event_type,
+                actor=event.actor,
+                timestamp=event.timestamp,
+                description=event.description,
+                metadata=event.metadata_json,
+                previous_event_hash=prev_hash
+            )
 
             if actual_hash != event.event_hash:
                 return {

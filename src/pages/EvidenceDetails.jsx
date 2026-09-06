@@ -8,7 +8,6 @@ import { CryptoDetails } from '../components/evidence/CryptoDetails.jsx';
 import { ProvenanceTimeline } from '../components/evidence/ProvenanceTimeline.jsx';
 import { CustodyTimeline } from '../components/evidence/CustodyTimeline.jsx';
 import { evidenceService } from '../services/evidenceService.js';
-import { custodyService } from '../services/custodyService.js';
 import { cn } from '../utils/cn.js';
 
 export const EvidenceDetails = () => {
@@ -23,9 +22,10 @@ export const EvidenceDetails = () => {
     if (id) {
       const controller = new AbortController();
       Promise.all([
-        evidenceService.getEvidenceById({ id, signal: controller.signal }),
-        // Custody is still mock for this milestone, but we keep the call
-        custodyService.getCustodyEvents(id).catch(() => [])
+        evidenceService.getEvidenceById(id, { signal: controller.signal }),
+        evidenceService.getCustodyChain(id, { signal: controller.signal })
+          .then(res => (Array.isArray(res) ? res : res?.events) || [])
+          .catch(() => [])
       ]).then(([evidenceData, custodyData]) => {
         setEvidence(evidenceData);
         setCustody(custodyData);
@@ -61,6 +61,22 @@ export const EvidenceDetails = () => {
       </PageContainer>
     );
   }
+
+  const verifyCustody = async () => {
+    setLoading(true);
+    try {
+      const result = await evidenceService.verifyCustodyChain(id);
+      alert(result.valid
+        ? `Custody chain verified successfully. ${result.events_checked} events checked.`
+        : `Custody chain integrity verification failed: ${result.message}`
+      );
+    } catch (err) {
+      console.error(err);
+      alert('An error occurred while verifying the custody chain.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const tabs = [
     { id: 'overview', label: 'Overview' },
@@ -113,12 +129,34 @@ export const EvidenceDetails = () => {
               </div>
             )}
             {activeTab === 'provenance' && <ProvenanceTimeline />}
-            {activeTab === 'custody' && <CustodyTimeline events={custody} />}
+            {activeTab === 'custody' && (
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-lg font-bold text-white">Custody Timeline</h3>
+                  <button
+                    onClick={verifyCustody}
+                    disabled={loading}
+                    className="px-4 py-2 bg-security-accent text-security-black text-xs font-bold rounded-lg hover:bg-opacity-90 transition-colors disabled:opacity-50"
+                  >
+                    Verify Chain
+                  </button>
+                </div>
+                <CustodyTimeline events={custody} />
+              </div>
+            )}
             {activeTab === 'crypto' && <CryptoDetails evidence={evidence} />}
             {activeTab === 'blockchain' && (
               <div className="glass-card p-6">
                 <h3 className="text-lg font-bold text-white mb-6">Blockchain Anchoring</h3>
                 <div className="space-y-4">
+                  <div className="flex justify-between py-3 border-b border-security-gray-800">
+                    <span className="text-gray-500 text-sm">Storage Encryption</span>
+                    <span className="text-security-accent text-sm font-bold uppercase">AES-256-GCM</span>
+                  </div>
+                  <div className="flex justify-between py-3 border-b border-security-gray-800">
+                    <span className="text-gray-500 text-sm">Encryption Status</span>
+                    <span className="text-white text-sm font-medium">Encrypted at Rest</span>
+                  </div>
                   <div className="flex justify-between py-3 border-b border-security-gray-800">
                     <span className="text-gray-500 text-sm">Network</span>
                     <span className="text-white text-sm font-medium">Coming Soon</span>

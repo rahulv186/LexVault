@@ -162,7 +162,7 @@ export const UploadEvidence = () => {
                   <p className="text-sm font-mono text-white">{result.evidence_id}</p>
                 </div>
                 <div className="p-4 rounded-lg bg-security-black border border-security-gray-700">
-                  <p className="text-xs text-gray-500 uppercase font-bold mb-1">SHA-256</p>
+                  <p className="text-xs text-gray-500 uppercase font-bold mb-1">SHA-256 (Plaintext)</p>
                   <p className="text-sm font-mono text-white truncate">{result.sha256}</p>
                 </div>
                 <div className="p-4 rounded-lg bg-security-black border border-security-gray-700">
@@ -170,6 +170,10 @@ export const UploadEvidence = () => {
                   <p className="text-sm font-mono text-white">{result.file_size} bytes</p>
                 </div>
                 <div className="p-4 rounded-lg bg-security-black border border-security-gray-700">
+                  <p className="text-xs text-gray-500 uppercase font-bold mb-1">Encryption</p>
+                  <p className="text-sm font-mono text-security-accent">AES-256-GCM</p>
+                </div>
+                <div className="p-4 rounded-lg bg-security-black border border-security-gray-700 col-span-1 md:col-span-2">
                   <p className="text-xs text-gray-500 uppercase font-bold mb-1">Timestamp</p>
                   <p className="text-sm font-mono text-white">{new Date(result.uploaded_at).toLocaleString()}</p>
                 </div>

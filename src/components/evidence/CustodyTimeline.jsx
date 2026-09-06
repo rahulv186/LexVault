@@ -2,13 +2,30 @@ import React from 'react';
 import { User, ShieldCheck } from 'lucide-react';
 import { cn } from '../../utils/cn.js';
 
+const formatEventType = (type) => {
+  if (!type || typeof type !== 'string') return 'Unknown Event';
+  return type
+    .toLowerCase()
+    .split('_')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+};
+
 export const CustodyTimeline = ({ events }) => {
+  if (!events || !Array.isArray(events)) {
+    return (
+      <div className="glass-card p-8 text-center">
+        <p className="text-gray-500 text-sm">Unable to load custody events.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="glass-card p-8">
       <h3 className="text-lg font-bold text-white mb-8">Forensic Chain of Custody</h3>
       <div className="space-y-6">
         {events.map((event, i) => (
-          <div key={event.id} className="relative pl-8">
+          <div key={event.id || i} className="relative pl-8">
             <div className="absolute left-0 top-0 bottom-0 w-px bg-security-gray-700"></div>
             <div className="absolute left-[-4px] top-0 w-2 h-2 rounded-full bg-security-accent"></div>
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-lg bg-security-black border border-security-gray-700">
@@ -16,20 +33,20 @@ export const CustodyTimeline = ({ events }) => {
                 <div className="p-2 rounded-lg bg-security-gray-800 text-gray-400">
                   <User className="w-5 h-5" />
                 </div>
-                <div>
+                <div className="flex flex-col">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-white">{event.actor}</span>
+                    <span className="text-sm font-bold text-white">{event.actor || 'Unknown'}</span>
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-security-accent/10 text-security-accent font-bold uppercase">
-                      {event.status}
+                      {formatEventType(event.event_type)}
                     </span>
                   </div>
-                  <p className="text-xs text-gray-500">{event.action}</p>
+                  <p className="text-xs text-gray-500">{event.description || 'No description provided'}</p>
                 </div>
               </div>
               <div className="flex items-center gap-4 text-right">
                 <div className="text-right">
-                  <p className="text-xs text-gray-300 font-mono">{event.signature.substring(0, 12)}...</p>
-                  <p className="text-[10px] text-gray-500">{event.timestamp}</p>
+                  <p className="text-xs text-gray-300 font-mono">{event.event_hash ? event.event_hash.substring(0, 12) : 'N/A'}...</p>
+                  <p className="text-[10px] text-gray-500">{event.timestamp ? new Date(event.timestamp).toLocaleString() : 'N/A'}</p>
                 </div>
                 <ShieldCheck className="w-5 h-5 text-security-accent" />
               </div>

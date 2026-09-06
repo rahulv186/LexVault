@@ -30,7 +30,7 @@ export const evidenceService = {
     return response.data; // returns { total, page, page_size, items }
   },
 
-  async getEvidenceById({ id, signal = null } = {}) {
+  async getEvidenceById(id, { signal = null } = {}) {
     const response = await apiClient.get(`/api/evidence/${id}/`, { signal });
     return response.data;
   },
@@ -49,7 +49,17 @@ export const evidenceService = {
     return response.data;
   },
 
-  async verifyEvidence({ id, file, signal = null } = {}) {
+  async getCustodyChain(id, { signal = null } = {}) {
+    const response = await apiClient.get(`/api/evidence/${id}/custody/`, { signal });
+    return response.data;
+  },
+
+  async verifyCustodyChain(id, { signal = null } = {}) {
+    const response = await apiClient.post(`/api/evidence/${id}/custody/verify/`, {}, { signal });
+    return response.data;
+  },
+
+  async verifyEvidence(id, { file, signal } = {}) {
     const formData = new FormData();
     formData.append('file', file);
 

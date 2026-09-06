@@ -20,6 +20,8 @@ class EvidenceResponse(BaseModel):
     uploaded_by: str
     uploaded_at: datetime
     verification_status: str
+    encryption_algorithm: Optional[str] = None
+    encrypted_file_size: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
 
