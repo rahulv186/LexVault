@@ -5,6 +5,7 @@ from typing import List, Optional
 from app.db.database import get_db
 from app.schemas.evidence import EvidenceResponse, EvidenceListResponse, VerificationResponse
 from app.services import evidence_service
+from app.core.config import settings
 from app.db.models import Evidence
 
 router = APIRouter(prefix="/api/evidence", tags=["evidence"])

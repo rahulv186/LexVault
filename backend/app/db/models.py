@@ -16,4 +16,9 @@ class Evidence(Base):
     uploaded_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     verification_status = Column(String, server_default="pending", nullable=False)
 
+    # Encryption Metadata
+    encryption_algorithm = Column(String)
+    encryption_nonce = Column(String)
+    encrypted_file_size = Column(BigInteger)
+
     # Index for SHA256 is already handled by index=True
