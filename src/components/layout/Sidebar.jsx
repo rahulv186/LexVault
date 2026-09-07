@@ -14,6 +14,7 @@ import {
   Activity
 } from 'lucide-react';
 import { cn } from '../../utils/cn.js';
+import { useAuth } from '../../context/AuthContext';
 
 const navItems = [
   { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
@@ -28,6 +29,7 @@ const navItems = [
 
 export const Sidebar = () => {
   const location = useLocation();
+  const { user } = useAuth();
 
   return (
     <aside className="w-64 bg-security-gray-900 border-r border-security-gray-700 flex flex-col h-screen">
@@ -86,8 +88,8 @@ export const Sidebar = () => {
             <Database className="w-4 h-4 text-security-accent" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium text-white truncate">Forensic_User_01</p>
-            <p className="text-[10px] text-gray-500 truncate">Security Clearance: L3</p>
+            <p className="text-xs font-medium text-white truncate">{user?.username || 'User'}</p>
+            <p className="text-[10px] text-gray-500 truncate">Role: {user?.role_name || 'Guest'}</p>
           </div>
         </div>
       </div>

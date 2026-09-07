@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from app.api import evidence
+from app.api import evidence, auth, users
 from app.core.config import settings
 from app.db.database import get_db
 
@@ -21,7 +21,9 @@ app.add_middleware(
 )
 
 # Include Routers
+app.include_router(auth.router)
 app.include_router(evidence.router)
+app.include_router(users.router)
 
 @app.get("/health", tags=["system"])
 def health_check():

@@ -7,6 +7,7 @@ from app.schemas.evidence import EvidenceResponse, EvidenceListResponse, Verific
 from app.services import evidence_service
 from app.core.config import settings
 from app.db.models import Evidence
+from app.api.dependencies import require_permission
 
 router = APIRouter(prefix="/api/evidence", tags=["evidence"])
 
@@ -27,14 +28,14 @@ def get_evidence_stats(db: Session = Depends(get_db)):
 @router.post("/upload/", response_model=EvidenceResponse, status_code=201)
 async def upload_evidence(
     file: UploadFile = File(...),
-    uploaded_by: str = Form(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("evidence:create"))
 ):
     if file.size > settings.MAX_UPLOAD_SIZE:
         raise HTTPException(status_code=413, detail=f"File too large. Maximum allowed size is {settings.MAX_UPLOAD_SIZE / (1024*1024):.2f} MB")
 
     try:
-        evidence = evidence_service.create_evidence(db, file, uploaded_by)
+        evidence = evidence_service.create_evidence(db, file, current_user.username)
         return evidence
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
@@ -46,7 +47,8 @@ def get_evidence(
     status: Optional[str] = None,
     type: Optional[str] = None,
     search: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("evidence:read"))
 ):
     total, items = evidence_service.get_evidence_list(
         db, page=page, page_size=page_size, status=status, search=search, evidence_type=type
@@ -59,7 +61,11 @@ def get_evidence(
     }
 
 @router.get("/{evidence_id}/", response_model=EvidenceResponse)
-def get_evidence_by_id(evidence_id: str, db: Session = Depends(get_db)):
+def get_evidence_by_id(
+    evidence_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("evidence:read"))
+):
     evidence = evidence_service.get_evidence_by_id(db, evidence_id)
     if not evidence:
         raise HTTPException(status_code=404, detail="Evidence record not found")
@@ -69,7 +75,8 @@ def get_evidence_by_id(evidence_id: str, db: Session = Depends(get_db)):
 async def verify_evidence(
     evidence_id: str,
     file: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("evidence:verify"))
 ):
     result = evidence_service.verify_evidence_integrity(db, evidence_id, file)
     if result is None:
@@ -77,7 +84,11 @@ async def verify_evidence(
     return result
 
 @router.get("/{evidence_id}/custody/", response_model=None)
-def get_evidence_custody(evidence_id: str, db: Session = Depends(get_db)):
+def get_evidence_custody(
+    evidence_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("evidence:custody:read"))
+):
     from app.services.custody_service import custody_service
     evidence = evidence_service.get_evidence_by_id(db, evidence_id)
     if not evidence:
@@ -103,7 +114,11 @@ def get_evidence_custody(evidence_id: str, db: Session = Depends(get_db)):
     }
 
 @router.post("/{evidence_id}/custody/verify/", response_model=None)
-def verify_custody_chain(evidence_id: str, db: Session = Depends(get_db)):
+def verify_custody_chain(
+    evidence_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("evidence:custody:verify"))
+):
     from app.services.custody_service import custody_service
     result = custody_service.verify_chain(db, evidence_id)
     if result.get("valid") is False and "message" in result and "not found" in result["message"]:
