@@ -14,6 +14,8 @@ class Permission(Base):
     name = Column(String, unique=True, nullable=False, index=True)
     description = Column(String)
 
+    roles = relationship("Role", secondary="role_permissions", back_populates="permissions")
+
 class Role(Base):
     __tablename__ = "roles"
     id = Column(Integer, primary_key=True, index=True)
@@ -37,8 +39,15 @@ class User(Base):
 
     role = relationship("Role", back_populates="users")
 
-# Update Permission to link back to Role
-Permission.roles = relationship("Role", secondary="role_permissions", back_populates="permissions")
+    @property
+    def role_name(self) -> str:
+        return self.role.name if self.role else ""
+
+    @property
+    def permissions(self) -> list[str]:
+        if not self.role:
+            return []
+        return sorted(permission.name for permission in self.role.permissions)
 
 class Evidence(Base):
     __tablename__ = "evidence"

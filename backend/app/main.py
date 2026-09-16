@@ -1,9 +1,11 @@
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.api import evidence, auth, users
 from app.core.config import settings
-from app.db.database import get_db
+from app.db.database import get_db, SessionLocal
+from app.db.seed import seed_iam
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -25,6 +27,14 @@ app.include_router(auth.router)
 app.include_router(evidence.router)
 app.include_router(users.router)
 
+# Auto-seed IAM data on startup
+@app.on_event("startup")
+def startup_seed():
+    try:
+        seed_iam()
+    except Exception as e:
+        print(f"[startup] IAM seed skipped: {e}")
+
 @app.get("/health", tags=["system"])
 def health_check():
     return {"status": "ok", "service": "lexvault-api"}
@@ -32,7 +42,7 @@ def health_check():
 @app.get("/health/db", tags=["system"])
 def db_health_check(db: Session = Depends(get_db)):
     try:
-        db.execute("SELECT 1")
+        db.execute(text("SELECT 1"))
         return {"status": "ok", "database": "reachable"}
     except Exception as e:
         return {"status": "error", "database": "unreachable", "detail": str(e)}, 500

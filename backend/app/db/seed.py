@@ -43,10 +43,11 @@ def seed_iam():
                 "evidence:custody:read", "evidence:custody:verify"
             ],
             "AUDITOR": [
-                "evidence:read", "evidence:custody:read", "evidence:custody:verify"
+                "evidence:read", "evidence:verify",
+                "evidence:custody:read", "evidence:custody:verify"
             ],
             "VIEWER": [
-                "evidence:read"
+                "evidence:read", "evidence:custody:read"
             ],
         }
 

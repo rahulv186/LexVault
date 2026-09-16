@@ -2,7 +2,7 @@ import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Sidebar } from './components/layout/Sidebar';
 import { Topbar } from './components/layout/Topbar';
-import { ProtectedRoute } from './components/ProtectedRoute';
+import { ProtectedRoute, RequirePermission } from './components/ProtectedRoute';
 
 import Dashboard from './pages/Dashboard';
 import EvidenceVault from './pages/EvidenceVault';
@@ -14,11 +14,14 @@ import ZKProofs from './pages/ZKProofs';
 import Architecture from './pages/Architecture';
 import Settings from './pages/Settings';
 import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/Register';
+import AdminUsers from './pages/AdminUsers';
 
 const App = () => {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
       <Route
         path="/*"
         element={
@@ -31,13 +34,14 @@ const App = () => {
                   <Routes>
                     <Route path="/" element={<Navigate to="/dashboard" replace />} />
                     <Route path="/dashboard" element={<Dashboard />} />
-                    <Route path="/evidence" element={<EvidenceVault />} />
-                    <Route path="/evidence/:id" element={<EvidenceDetails />} />
-                    <Route path="/upload" element={<UploadEvidence />} />
-                    <Route path="/verify" element={<VerifyEvidence />} />
-                    <Route path="/custody" element={<ChainOfCustody />} />
+                    <Route path="/evidence" element={<RequirePermission permission="evidence:read"><EvidenceVault /></RequirePermission>} />
+                    <Route path="/evidence/:id" element={<RequirePermission permission="evidence:read"><EvidenceDetails /></RequirePermission>} />
+                    <Route path="/upload" element={<RequirePermission permission="evidence:create"><UploadEvidence /></RequirePermission>} />
+                    <Route path="/verify" element={<RequirePermission permission="evidence:verify"><VerifyEvidence /></RequirePermission>} />
+                    <Route path="/custody" element={<RequirePermission permission="evidence:custody:read"><ChainOfCustody /></RequirePermission>} />
                     <Route path="/zk-proofs" element={<ZKProofs />} />
                     <Route path="/architecture" element={<Architecture />} />
+                    <Route path="/admin/users" element={<RequirePermission permission="users:manage"><AdminUsers /></RequirePermission>} />
                     <Route path="/settings" element={<Settings />} />
                     <Route path="*" element={<Navigate to="/dashboard" replace />} />
                   </Routes>

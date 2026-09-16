@@ -9,9 +9,12 @@ import { ProvenanceTimeline } from '../components/evidence/ProvenanceTimeline.js
 import { CustodyTimeline } from '../components/evidence/CustodyTimeline.jsx';
 import { evidenceService } from '../services/evidenceService.js';
 import { cn } from '../utils/cn.js';
+import { useAuth } from '../context/AuthContext.jsx';
+import { hasPermission } from '../utils/permissions.js';
 
 export const EvidenceDetails = () => {
   const { id } = useParams();
+  const { user } = useAuth();
   const [evidence, setEvidence] = useState(null);
   const [custody, setCustody] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -78,10 +81,13 @@ export const EvidenceDetails = () => {
     }
   };
 
+  const canReadCustody = hasPermission(user, 'evidence:custody:read');
+  const canVerifyCustody = hasPermission(user, 'evidence:custody:verify');
+
   const tabs = [
     { id: 'overview', label: 'Overview' },
     { id: 'provenance', label: 'Provenance' },
-    { id: 'custody', label: 'Chain of Custody' },
+    ...(canReadCustody ? [{ id: 'custody', label: 'Chain of Custody' }] : []),
     { id: 'crypto', label: 'Cryptographic Proof' },
     { id: 'blockchain', label: 'Blockchain' },
   ];
@@ -133,13 +139,15 @@ export const EvidenceDetails = () => {
               <div className="space-y-6">
                 <div className="flex justify-between items-center">
                   <h3 className="text-lg font-bold text-white">Custody Timeline</h3>
-                  <button
-                    onClick={verifyCustody}
-                    disabled={loading}
-                    className="px-4 py-2 bg-security-accent text-security-black text-xs font-bold rounded-lg hover:bg-opacity-90 transition-colors disabled:opacity-50"
-                  >
-                    Verify Chain
-                  </button>
+                  {canVerifyCustody && (
+                    <button
+                      onClick={verifyCustody}
+                      disabled={loading}
+                      className="px-4 py-2 bg-security-accent text-security-black text-xs font-bold rounded-lg hover:bg-opacity-90 transition-colors disabled:opacity-50"
+                    >
+                      Verify Chain
+                    </button>
+                  )}
                 </div>
                 <CustodyTimeline events={custody} />
               </div>

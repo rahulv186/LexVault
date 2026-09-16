@@ -148,7 +148,7 @@ def get_evidence_by_id(db: Session, evidence_id: str):
     """Retrieves a single evidence record by its evidence_id."""
     return db.query(Evidence).filter(Evidence.evidence_id == evidence_id).first()
 
-def verify_evidence_integrity(db: Session, evidence_id: str, verification_file) -> dict:
+def verify_evidence_integrity(db: Session, evidence_id: str, verification_file, verified_by: str) -> dict:
     """
     Verifies a provided file upload against the stored SHA-256 hash.
     The uploaded file is assumed to be plaintext.
@@ -177,7 +177,7 @@ def verify_evidence_integrity(db: Session, evidence_id: str, verification_file) 
         db,
         evidence,
         "VERIFICATION_PERFORMED",
-        "System",
+        verified_by,
         f"Integrity verification performed. Result: {status}",
         metadata={"result": status, "current_hash": current_hash}
     )
@@ -199,7 +199,7 @@ def verify_stored_evidence_integrity(db: Session, evidence_id: str) -> dict:
     if not evidence:
         return None
 
-    stored_path = Path("backend/uploads") / evidence.stored_filename
+    stored_path = Path(settings.UPLOADS_DIR) / evidence.stored_filename
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         decrypted_path = Path(tmp_dir) / "decrypted.bin"

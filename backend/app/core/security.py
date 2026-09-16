@@ -1,12 +1,13 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Any
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+from pwdlib import PasswordHash
+from pwdlib.hashers.argon2 import Argon2Hasher
 from app.core.config import settings
 
 # Password hashing configuration
-# Argon2id is the recommended default for passlib's argon2
-pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
+# Using pwdlib with Argon2id for secure password hashing
+pwd_context = PasswordHash([Argon2Hasher()])
 
 def hash_password(password: str) -> str:
     """Hashes a plaintext password using Argon2id."""

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { PageContainer } from '../components/layout/PageContainer.jsx';
 import { useAuth } from '../context/AuthContext';
 import { Lock, User, Loader2 } from 'lucide-react';
@@ -80,6 +80,15 @@ export const LoginPage = () => {
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Sign In'}
             </button>
           </form>
+
+          <div className="mt-8 text-center">
+            <p className="text-gray-500 text-sm">
+              Don't have an account?{' '}
+              <Link to="/register" className="text-security-accent hover:underline font-medium">
+                Create one
+              </Link>
+            </p>
+          </div>
         </div>
       </div>
     </PageContainer>

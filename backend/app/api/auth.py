@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.db.models import User, Role
 from app.schemas.auth import UserCreate, UserLogin, Token, UserResponse
+from app.api.dependencies import get_current_user as get_current_user_simple
 from app.core import security
 from app.core.config import settings
 from datetime import timedelta
@@ -43,23 +44,15 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_user)
 
-    # We need to return role_name in UserResponse
-    return {
-        "id": new_user.id,
-        "username": new_user.username,
-        "email": new_user.email,
-        "full_name": new_user.full_name,
-        "role_name": default_role.name,
-        "is_active": new_user.is_active
-    }
+    return new_user
 
 @router.post("/login", response_model=Token)
 def login(
-    form_data: OAuth2PasswordRequestForm = Depends(),
+    login_data: UserLogin,
     db: Session = Depends(get_db)
 ):
-    user = db.query(User).filter(User.username == form_data.username).first()
-    if not user or not security.verify_password(form_data.password, user.password_hash):
+    user = db.query(User).filter(User.username == login_data.username).first()
+    if not user or not security.verify_password(login_data.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
@@ -68,15 +61,14 @@ def login(
 
     if not user.is_active:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_403_FORBIDDEN,
             detail="Inactive user account",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Create JWT
     access_token_expires = timedelta(minutes=settings.LEXVAULT_ACCESS_TOKEN_EXPIRE_MINUTES or 30)
     access_token = security.create_access_token(
-        data={"sub": str(user.id), "role": user.role.name},
+        data={"sub": str(user.id)},
         expires_delta=access_token_expires
     )
 
@@ -87,17 +79,4 @@ def login(
 
 @router.get("/me", response_model=UserResponse)
 def get_me(current_user: User = Depends(get_current_user_simple)):
-    # We use a simplified version of get_current_user that doesn't depend on db if needed,
-    # but for now let's just use the one from dependencies.
-    # Wait, I should probably define a simpler one or just use the standard one.
-    return {
-        "id": current_user.id,
-        "username": current_user.username,
-        "email": current_user.email,
-        "full_name": current_user.full_name,
-        "role_name": current_user.role.name,
-        "is_active": current_user.is_active
-    }
-
-# Helper for /me to avoid circular dependency or redundant DB calls if needed
-from app.api.dependencies import get_current_user as get_current_user_simple
+    return current_user

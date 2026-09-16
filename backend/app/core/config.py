@@ -20,6 +20,22 @@ class Settings(BaseSettings):
     # Pinata IPFS Credentials
     PINATA_JWT: str = Field(default="", validation_alias="PINATA_JWT")
 
+    # JWT Authentication
+    LEXVAULT_JWT_SECRET: str = Field(
+        default="",
+        validation_alias="LEXVAULT_JWT_SECRET",
+    )
+
+    LEXVAULT_JWT_ALGORITHM: str = Field(
+        default="HS256",
+        validation_alias="LEXVAULT_JWT_ALGORITHM",
+    )
+
+    LEXVAULT_ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(
+        default=30,
+        validation_alias="LEXVAULT_ACCESS_TOKEN_EXPIRE_MINUTES",
+    )
+
     # LEXVAULT_ENCRYPTION_KEY in .env
     raw_encryption_key: str = Field(
         default="",

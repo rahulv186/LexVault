@@ -24,7 +24,12 @@ class IPFSService:
         # Safe diagnostics for JWT structure
         token = self.jwt.strip()
         sections = token.split('.')
-        logger.info(f"JWT Diagnostics | Configured: True | Length: {len(token)} | Sections: {len(sections)} | Prefix: {token[:10]}...")
+        logger.info(
+            "Pinata JWT configured for encrypted evidence upload. "
+            "Length: %s | Sections: %s",
+            len(token),
+            len(sections),
+        )
 
         if len(sections) != 3:
             logger.error("Pinata JWT is malformed. A valid JWT must have 3 dot-separated sections (Header.Payload.Signature). "

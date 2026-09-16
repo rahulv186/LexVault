@@ -3,10 +3,18 @@ from sqlalchemy.orm import Session
 from typing import List
 from app.db.database import get_db
 from app.db.models import User, Role
-from app.api.dependencies import get_current_user, require_permission
-from app.schemas.auth import UserResponse, UserCreate
+from app.api.dependencies import require_permission
+from app.schemas.auth import RoleResponse, UserResponse, UserCreate, UserRoleUpdate, UserStatusUpdate
 
 router = APIRouter(prefix="/api/users", tags=["user-management"])
+
+def serialize_role(role: Role) -> dict:
+    return {
+        "id": role.id,
+        "name": role.name,
+        "description": role.description,
+        "permissions": sorted(permission.name for permission in role.permissions),
+    }
 
 @router.get("/", response_model=List[UserResponse])
 def list_users(
@@ -14,6 +22,14 @@ def list_users(
     current_user: User = Depends(require_permission("users:read"))
 ):
     return db.query(User).all()
+
+@router.get("/roles/", response_model=List[RoleResponse])
+def list_roles(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("users:manage"))
+):
+    roles = db.query(Role).order_by(Role.name.asc()).all()
+    return [serialize_role(role) for role in roles]
 
 @router.get("/{user_id}", response_model=UserResponse)
 def get_user(
@@ -57,45 +73,53 @@ def create_user(
     db.commit()
     db.refresh(new_user)
 
-    return {
-        "id": new_user.id,
-        "username": new_user.username,
-        "email": new_user.email,
-        "full_name": new_user.full_name,
-        "role_name": new_user.role.name if new_user.role else "None",
-        "is_active": new_user.is_active
-    }
+    return new_user
 
 @router.patch("/{user_id}/role")
 def update_user_role(
     user_id: int,
-    role_name: str,
+    role_update: UserRoleUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("users:manage"))
 ):
+    if user_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Users cannot change their own role"
+        )
+
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    role_name = role_update.role_name.strip().upper()
     role = db.query(Role).filter(Role.name == role_name).first()
     if not role:
         raise HTTPException(status_code=400, detail=f"Role {role_name} does not exist")
 
     user.role_id = role.id
     db.commit()
-    return {"message": f"User {user.username} role updated to {role_name}"}
+    db.refresh(user)
+    return user
 
 @router.patch("/{user_id}/status")
 def update_user_status(
     user_id: int,
-    is_active: bool,
+    status_update: UserStatusUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("users:manage"))
 ):
+    if user_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Users cannot change their own active status"
+        )
+
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    user.is_active = is_active
+    user.is_active = status_update.is_active
     db.commit()
-    return {"message": f"User {user.username} active status updated to {is_active}"}
+    db.refresh(user)
+    return user

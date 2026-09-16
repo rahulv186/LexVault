@@ -6,13 +6,16 @@ from app.db.database import get_db
 from app.schemas.evidence import EvidenceResponse, EvidenceListResponse, VerificationResponse
 from app.services import evidence_service
 from app.core.config import settings
-from app.db.models import Evidence
+from app.db.models import Evidence, User
 from app.api.dependencies import require_permission
 
 router = APIRouter(prefix="/api/evidence", tags=["evidence"])
 
 @router.get("/stats/", response_model=None)
-def get_evidence_stats(db: Session = Depends(get_db)):
+def get_evidence_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("evidence:read"))
+):
     total = db.query(func.count(Evidence.id)).scalar() or 0
     verified = db.query(func.count(Evidence.id)).filter(Evidence.verification_status == "verified").scalar() or 0
     pending = db.query(func.count(Evidence.id)).filter(Evidence.verification_status == "pending").scalar() or 0
@@ -78,7 +81,7 @@ async def verify_evidence(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("evidence:verify"))
 ):
-    result = evidence_service.verify_evidence_integrity(db, evidence_id, file)
+    result = evidence_service.verify_evidence_integrity(db, evidence_id, file, current_user.username)
     if result is None:
         raise HTTPException(status_code=404, detail="Evidence record not found")
     return result

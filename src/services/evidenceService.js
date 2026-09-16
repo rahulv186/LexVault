@@ -26,10 +26,9 @@ export const evidenceService = {
     return response.data;
   },
 
-  async uploadEvidence({ file, uploadedBy = 'Forensic_User_01', signal = null } = {}) {
+  async uploadEvidence({ file, signal = null } = {}) {
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('uploaded_by', uploadedBy);
 
     const response = await apiClient.post('/api/evidence/upload/', formData, {
       headers: {

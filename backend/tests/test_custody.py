@@ -1,29 +1,24 @@
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 from app.db.database import Base
 from app.db.models import Evidence, CustodyEvent
 from app.services.custody_service import custody_service
-from app.services.hashing_service import calculate_sha256
-import os
-import tempfile
-from pathlib import Path
-from app.core.config import settings
-
-# Use a separate test database if possible, or a temp one
-# For this test, we'll use a local postgres db lexvault_test or similar
-# Since we don't have a separate one, we'll assume DATABASE_URL is set.
 
 @pytest.fixture
 def db_session():
-    engine = create_engine(settings.DATABASE_URL)
-    Base.metadata.create_all(engine)
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(bind=engine)
     Session = sessionmaker(bind=engine)
     session = Session()
     yield session
     session.close()
-    # Cleanup: we only cleanup the evidence we create in this test
-    # but since this is a shared DB, we should be careful.
+    Base.metadata.drop_all(bind=engine)
 
 def test_custody_chain_creation_and_verification(db_session):
     # 1. Create an evidence record

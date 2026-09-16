@@ -17,7 +17,6 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     username: Optional[str] = None
-    role: Optional[str] = None
 
 class UserResponse(BaseModel):
     id: int
@@ -25,7 +24,20 @@ class UserResponse(BaseModel):
     email: str
     full_name: Optional[str]
     role_name: str
+    permissions: list[str] = []
     is_active: bool
 
     class Config:
         from_attributes = True
+
+class UserRoleUpdate(BaseModel):
+    role_name: str
+
+class UserStatusUpdate(BaseModel):
+    is_active: bool
+
+class RoleResponse(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    permissions: list[str] = []

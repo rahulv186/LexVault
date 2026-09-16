@@ -1,6 +1,7 @@
 import React from 'react';
 import { PageContainer } from '../components/layout/PageContainer.jsx';
 import { Shield, Bell, Globe, Database, User } from 'lucide-react';
+import { useAuth } from '../context/AuthContext.jsx';
 
 const SettingSection = ({ title, children }) => (
   <div className="mb-8">
@@ -25,6 +26,8 @@ const SettingField = ({ label, description, children }) => (
 );
 
 export const Settings = () => {
+  const { user } = useAuth();
+
   return (
     <PageContainer title="Vault Settings">
       <div className="max-w-3xl mx-auto">
@@ -34,16 +37,16 @@ export const Settings = () => {
               <User className="w-8 h-8 text-gray-400" />
             </div>
             <div>
-              <h4 className="text-white font-bold">Operator_A</h4>
-              <p className="text-xs text-gray-500">Security Clearance: Level 3 (Senior Investigator)</p>
+              <h4 className="text-white font-bold">{user?.full_name || user?.username || 'Vault User'}</h4>
+              <p className="text-xs text-gray-500">Application Role: {user?.role_name || 'VIEWER'}</p>
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <SettingField label="Display Name" description="Publicly visible name on custody logs">
-              <input type="text" className="w-full bg-security-black border border-security-gray-700 rounded-lg px-3 py-2 text-sm text-white" defaultValue="Operator_A" />
+              <input type="text" className="w-full bg-security-black border border-security-gray-700 rounded-lg px-3 py-2 text-sm text-white" defaultValue={user?.full_name || user?.username || ''} />
             </SettingField>
             <SettingField label="Notification Email" description="Alerts for integrity mismatches">
-              <input type="email" className="w-full bg-security-black border border-security-gray-700 rounded-lg px-3 py-2 text-sm text-white" defaultValue="op_a@lexvault.sec" />
+              <input type="email" className="w-full bg-security-black border border-security-gray-700 rounded-lg px-3 py-2 text-sm text-white" defaultValue={user?.email || ''} />
             </SettingField>
           </div>
         </SettingSection>

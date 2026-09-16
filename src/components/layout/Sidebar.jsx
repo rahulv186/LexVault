@@ -15,15 +15,17 @@ import {
 } from 'lucide-react';
 import { cn } from '../../utils/cn.js';
 import { useAuth } from '../../context/AuthContext';
+import { hasPermission } from '../../utils/permissions.js';
 
 const navItems = [
   { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-  { name: 'Evidence Vault', path: '/evidence', icon: ShieldCheck },
-  { name: 'Upload Evidence', path: '/upload', icon: UploadCloud },
-  { name: 'Verify Evidence', path: '/verify', icon: Search },
-  { name: 'Chain of Custody', path: '/custody', icon: History },
+  { name: 'Evidence Vault', path: '/evidence', icon: ShieldCheck, permission: 'evidence:read' },
+  { name: 'Upload Evidence', path: '/upload', icon: UploadCloud, permission: 'evidence:create' },
+  { name: 'Verify Evidence', path: '/verify', icon: Search, permission: 'evidence:verify' },
+  { name: 'Chain of Custody', path: '/custody', icon: History, permission: 'evidence:custody:read' },
   { name: 'ZK Proofs', path: '/zk-proofs', icon: Zap },
   { name: 'Architecture', path: '/architecture', icon: Boxes },
+  { name: 'User Management', path: '/admin/users', icon: Database, permission: 'users:manage' },
   { name: 'Settings', path: '/settings', icon: Settings },
 ];
 
@@ -41,7 +43,7 @@ export const Sidebar = () => {
       </div>
 
       <nav className="flex-1 p-4 space-y-1">
-        {navItems.map((item) => {
+        {navItems.filter((item) => !item.permission || hasPermission(user, item.permission)).map((item) => {
           const isActive = location.pathname === item.path;
           return (
             <Link

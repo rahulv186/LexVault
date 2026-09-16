@@ -25,7 +25,10 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response && error.response.status === 401) {
+    const requestUrl = error.config?.url || '';
+    const isAuthAction = requestUrl.includes('/api/auth/login') || requestUrl.includes('/api/auth/register');
+
+    if (error.response && error.response.status === 401 && !isAuthAction) {
       localStorage.removeItem('lexvault_token');
       window.location.href = '/login';
     }
