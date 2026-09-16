@@ -91,3 +91,22 @@ class CustodyEvent(Base):
 
     # Relationships
     evidence = relationship("Evidence", back_populates="custody_events")
+
+class ZKProof(Base):
+    __tablename__ = "zk_proofs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    proof_id = Column(String, unique=True, index=True, nullable=False)
+    evidence_id = Column(Integer, ForeignKey("evidence.id"), nullable=False, index=True)
+    circuit_name = Column(String, nullable=False)
+    circuit_version = Column(String, nullable=False)
+    proving_system = Column(String, nullable=False)
+    public_inputs = Column(JSON, nullable=False)
+    public_signals = Column(JSON, nullable=False)
+    proof_data = Column(JSON, nullable=False)
+    status = Column(String, server_default="GENERATED", nullable=False)
+    verification_result = Column(Boolean, nullable=True)
+    verified_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    evidence = relationship("Evidence")

@@ -58,11 +58,62 @@ alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
+## Zero-Knowledge Proof Prototype
+
+LexVault includes a first real ZK proof workflow using Circom, snarkjs, and Groth16. The circuit lives in `../zk/circuits/evidence_commitment.circom`.
+
+### What It Proves
+The `evidence_commitment` circuit proves that the prover knows private field values that satisfy this public commitment:
+
+```text
+commitment = evidenceHash^2 + evidenceHash * blinding + blinding^2
+```
+
+### Private Inputs
+- `evidenceHash`: a field element derived off-chain from the stored SHA-256 evidence fingerprint.
+- `blinding`: a private field element used during proof generation.
+
+### Public Inputs
+- `commitment`: the circuit-friendly commitment exposed as the public signal.
+
+### Important Limitation
+This first circuit does not prove SHA-256 over the full evidence file inside the circuit. LexVault still computes the plaintext SHA-256 off-chain for evidence integrity. The ZK proof demonstrates a real commitment proof associated with an evidence record without exposing the private witness.
+
+It also does not prove AES-GCM encryption, IPFS storage, database state, or custody-chain hashing.
+
+### Development Setup
+The Groth16 setup is a local prototype trusted setup for hackathon/demo use only.
+
+```bash
+npm --prefix ../zk install
+npm --prefix ../zk run setup
+```
+
+Generate a proof:
+
+```bash
+printf '{"evidence_id":"EV-2026-000001","sha256":"<64 hex chars>"}' | npm --prefix ../zk run prove
+```
+
+Verify a proof:
+
+```bash
+printf '{"proof":{...},"public_signals":["..."]}' | npm --prefix ../zk run verify
+```
+
+Backend endpoints:
+- `GET /api/zk/proofs/`
+- `POST /api/zk/proofs/`
+- `POST /api/zk/proofs/{proof_id}/verify/`
+
+All endpoints require JWT authentication and DB-backed RBAC permissions.
+
 ## ⚠️ Security Warnings
 - **Key Management**: Never commit the `.env` file. If the master key is lost, all encrypted evidence is permanently undecryptable.
 - **Plaintext**: No plaintext evidence is ever stored permanently on disk.
 - **GCM Nonce**: Nonces are randomly generated per file to prevent key-stream reuse.
+- **ZK Witnesses**: Private ZK witness values are not stored in the database.
 
 ## 🗺️ Roadmap
-- **Current**: SHA-256 + AES-256-GCM + PostgreSQL
-- **Future**: IPFS storage, Blockchain anchoring, ZK proofs for integrity, Cryptographic chain-of-custody signatures.
+- **Current**: SHA-256 + AES-256-GCM + PostgreSQL + optional IPFS + custody-chain verification + real Groth16 commitment proof
+- **Future**: Blockchain anchoring, production trusted setup, richer ZK circuits, cryptographic chain-of-custody signatures.

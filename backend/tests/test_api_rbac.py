@@ -20,6 +20,8 @@ ROLE_PERMISSIONS = {
         "evidence:custody:read",
         "evidence:custody:verify",
         "evidence:delete",
+        "zk:generate",
+        "zk:verify",
         "users:read",
         "users:manage",
     ],
@@ -29,18 +31,23 @@ ROLE_PERMISSIONS = {
         "evidence:verify",
         "evidence:custody:read",
         "evidence:custody:verify",
+        "zk:generate",
+        "zk:verify",
     ],
     "FORENSIC_ANALYST": [
         "evidence:read",
         "evidence:verify",
         "evidence:custody:read",
         "evidence:custody:verify",
+        "zk:generate",
+        "zk:verify",
     ],
     "AUDITOR": [
         "evidence:read",
         "evidence:verify",
         "evidence:custody:read",
         "evidence:custody:verify",
+        "zk:verify",
     ],
     "VIEWER": [
         "evidence:read",
@@ -338,3 +345,48 @@ def test_invalid_expired_and_malformed_jwts_are_rejected(client, db_session):
         headers={"Authorization": f"Bearer {malformed_subject}"},
     )
     assert malformed_response.status_code == 401
+
+
+def test_zk_endpoints_require_auth_and_viewer_cannot_generate(client, db_session):
+    viewer = create_user(db_session, "zk_viewer", "VIEWER")
+
+    assert client.get("/api/zk/proofs/").status_code == 401
+    response = client.post(
+        "/api/zk/proofs/",
+        headers=auth_headers(viewer),
+        json={"evidence_id": "EV-TEST-001"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_zk_proof_associated_with_correct_evidence_id(client, db_session, monkeypatch):
+    investigator = create_user(db_session, "zk_investigator", "INVESTIGATOR")
+    evidence = create_evidence(db_session, evidence_id="EV-ZK-API-001")
+
+    def fake_run_zk_script(script_name, payload):
+        if script_name == "prove.js":
+            return {
+                "circuit_name": "evidence_commitment",
+                "circuit_version": "1.0.0",
+                "proving_system": "groth16",
+                "public_inputs": {"commitment": "123"},
+                "public_signals": ["123"],
+                "proof": {"pi_a": ["1", "2", "1"], "protocol": "groth16", "curve": "bn128"},
+            }
+        return {"valid": True}
+
+    monkeypatch.setattr("app.services.zk_service.zk_service._run_zk_script", fake_run_zk_script)
+
+    response = client.post(
+        "/api/zk/proofs/",
+        headers=auth_headers(investigator),
+        json={"evidence_id": evidence.evidence_id},
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["evidence_public_id"] == "EV-ZK-API-001"
+    assert body["circuit_name"] == "evidence_commitment"
+    assert "evidenceHash" not in str(body)
+    assert "blinding" not in str(body)

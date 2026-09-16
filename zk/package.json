@@ -1,0 +1,15 @@
+{
+  "name": "lexvault-zk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup": "node scripts/setup.js",
+    "prove": "node scripts/prove.js",
+    "verify": "node scripts/verify.js"
+  },
+  "dependencies": {
+    "circom": "0.5.46",
+    "snarkjs": "0.7.6"
+  }
+}

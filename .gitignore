@@ -16,6 +16,10 @@ dist/
 # Uploaded evidence
 backend/uploads/
 
+# Generated ZK artifacts
+zk/build/
+zk/node_modules/
+
 # OS
 .DS_Store
 

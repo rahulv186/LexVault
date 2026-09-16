@@ -39,7 +39,7 @@ const App = () => {
                     <Route path="/upload" element={<RequirePermission permission="evidence:create"><UploadEvidence /></RequirePermission>} />
                     <Route path="/verify" element={<RequirePermission permission="evidence:verify"><VerifyEvidence /></RequirePermission>} />
                     <Route path="/custody" element={<RequirePermission permission="evidence:custody:read"><ChainOfCustody /></RequirePermission>} />
-                    <Route path="/zk-proofs" element={<ZKProofs />} />
+                    <Route path="/zk-proofs" element={<RequirePermission permission="zk:verify"><ZKProofs /></RequirePermission>} />
                     <Route path="/architecture" element={<Architecture />} />
                     <Route path="/admin/users" element={<RequirePermission permission="users:manage"><AdminUsers /></RequirePermission>} />
                     <Route path="/settings" element={<Settings />} />

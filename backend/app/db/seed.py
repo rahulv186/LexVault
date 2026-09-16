@@ -13,6 +13,8 @@ def seed_iam():
             ("evidence:custody:read", "Read custody chain"),
             ("evidence:custody:verify", "Verify custody chain integrity"),
             ("evidence:delete", "Delete evidence records"),
+            ("zk:generate", "Generate zero-knowledge proofs"),
+            ("zk:verify", "Verify zero-knowledge proofs"),
             ("users:read", "Read user profiles"),
             ("users:manage", "Manage users and roles"),
         ]
@@ -32,19 +34,23 @@ def seed_iam():
             "ADMIN": [
                 "evidence:create", "evidence:read", "evidence:verify",
                 "evidence:custody:read", "evidence:custody:verify",
-                "evidence:delete", "users:read", "users:manage"
+                "evidence:delete", "zk:generate", "zk:verify",
+                "users:read", "users:manage"
             ],
             "INVESTIGATOR": [
                 "evidence:create", "evidence:read", "evidence:verify",
-                "evidence:custody:read", "evidence:custody:verify"
+                "evidence:custody:read", "evidence:custody:verify",
+                "zk:generate", "zk:verify"
             ],
             "FORENSIC_ANALYST": [
                 "evidence:read", "evidence:verify",
-                "evidence:custody:read", "evidence:custody:verify"
+                "evidence:custody:read", "evidence:custody:verify",
+                "zk:generate", "zk:verify"
             ],
             "AUDITOR": [
                 "evidence:read", "evidence:verify",
-                "evidence:custody:read", "evidence:custody:verify"
+                "evidence:custody:read", "evidence:custody:verify",
+                "zk:verify"
             ],
             "VIEWER": [
                 "evidence:read", "evidence:custody:read"

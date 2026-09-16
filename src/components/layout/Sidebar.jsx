@@ -23,7 +23,7 @@ const navItems = [
   { name: 'Upload Evidence', path: '/upload', icon: UploadCloud, permission: 'evidence:create' },
   { name: 'Verify Evidence', path: '/verify', icon: Search, permission: 'evidence:verify' },
   { name: 'Chain of Custody', path: '/custody', icon: History, permission: 'evidence:custody:read' },
-  { name: 'ZK Proofs', path: '/zk-proofs', icon: Zap },
+  { name: 'ZK Proofs', path: '/zk-proofs', icon: Zap, permission: 'zk:verify' },
   { name: 'Architecture', path: '/architecture', icon: Boxes },
   { name: 'User Management', path: '/admin/users', icon: Database, permission: 'users:manage' },
   { name: 'Settings', path: '/settings', icon: Settings },
