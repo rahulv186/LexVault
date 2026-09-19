@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   ShieldCheck,
@@ -11,7 +11,8 @@ import {
   Settings,
   Lock,
   Database,
-  Activity
+  Activity,
+  LogOut
 } from 'lucide-react';
 import { cn } from '../../utils/cn.js';
 import { useAuth } from '../../context/AuthContext';
@@ -31,7 +32,13 @@ const navItems = [
 
 export const Sidebar = () => {
   const location = useLocation();
-  const { user } = useAuth();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   return (
     <aside className="w-64 bg-security-gray-900 border-r border-security-gray-700 flex flex-col h-screen">
@@ -85,14 +92,23 @@ export const Sidebar = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-3 px-2 py-2 rounded-lg bg-security-gray-800 border border-security-gray-700">
-          <div className="w-8 h-8 rounded-full bg-security-accent/20 flex items-center justify-center border border-security-accent/30">
-            <Database className="w-4 h-4 text-security-accent" />
+        <div className="flex items-center justify-between gap-3 px-2 py-2 rounded-lg bg-security-gray-800 border border-security-gray-700">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-full bg-security-accent/20 flex items-center justify-center border border-security-accent/30 shrink-0">
+              <Database className="w-4 h-4 text-security-accent" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-white truncate">{user?.username || 'User'}</p>
+              <p className="text-[10px] text-gray-500 truncate">Role: {user?.role_name || 'Guest'}</p>
+            </div>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium text-white truncate">{user?.username || 'User'}</p>
-            <p className="text-[10px] text-gray-500 truncate">Role: {user?.role_name || 'Guest'}</p>
-          </div>
+          <button
+            onClick={handleLogout}
+            title="Sign out of LexVault"
+            className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-colors shrink-0"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
       </div>
     </aside>
