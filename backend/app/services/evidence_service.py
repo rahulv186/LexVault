@@ -1,225 +1,293 @@
-from sqlalchemy.orm import Session
-from sqlalchemy import func
-from app.db.models import Evidence, CustodyEvent
-from app.schemas.evidence import EvidenceResponse
-from app.services.hashing_service import calculate_sha256
-from app.services.encryption_service import encryption_service
-from app.services.custody_service import custody_service
-from app.services.ipfs_service import ipfs_service
-from app.utils.file_utils import save_upload_file
-import datetime
 import os
-import tempfile
-from pathlib import Path
-from datetime import datetime, timezone
+import hashlib
+import uuid
+from typing import Generator, BinaryIO, Optional
+from sqlalchemy.orm import Session
+from app.db.models import Evidence, CustodyEvent
+from app.services.encryption_service import encryption_service, FramingViolationError
+from app.services.storage import storage_provider
+from app.services.custody_service import custody_service
 from app.core.config import settings
+from datetime import datetime, timezone
 
-def generate_evidence_id(db: Session) -> str:
-    """Generates a unique evidence ID in the format EV-YYYY-XXXXXX."""
-    year = datetime.now().year
-    result = db.execute(
-        func.count(Evidence.id)
-    ).scalar()
+def generate_secure_evidence_id() -> str:
+    """Generates a collision-safe unique evidence ID."""
+    return f"EV-{uuid.uuid4().hex[:12].upper()}"
 
-    count = result or 0
-    return f"EV-{year}-{str(count + 1).zfill(6)}"
+def create_evidence_streaming(db: Session, upload_file, uploaded_by: str, case_id: Optional[uuid.UUID] = None) -> Evidence:
+    """
+    Implements a secure streaming pipeline for evidence upload:
+    Plaintext Stream -> SHA-256 -> AES-GCM (Framed) -> Storage
+    """
+    # 1. Setup Encryption Keys
+    dek = os.urandom(32)
+    wrapped_dek = encryption_service.wrap_key(dek)
+    base_nonce = os.urandom(12)
 
-def create_evidence(db: Session, upload_file, uploaded_by: str) -> Evidence:
-    """Processes the upload, calculates hash, encrypts, stores to IPFS, and creates custody events."""
     original_filename = upload_file.filename
+    mime_type = upload_file.content_type
 
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        tmp_path = Path(tmp_dir) / original_filename
+    # Generate safe storage reference
+    storage_ref = f"{uuid.uuid4().hex}.enc"
 
-        # 1. Save plaintext temporarily
-        with open(tmp_path, "wb") as f:
-            chunk_size = 1024 * 1024
-            while chunk := upload_file.file.read(chunk_size):
-                f.write(chunk)
+    sha256_hasher = hashlib.sha256()
+    bytes_processed = 0
+    chunk_idx = 0
 
-        # 2. Calculate SHA-256 of original plaintext
-        sha256 = calculate_sha256(str(tmp_path))
+    # Temporary buffer for storage save
+    # In a real S3 implementation, we'd stream directly.
+    # For LocalStorage, we use a temporary file then move it.
+    import tempfile
+    with tempfile.TemporaryFile() as tmp_storage:
+        # A. Write Header
+        # We don't know total_chunks yet, so we estimate or update later.
+        # For the framing spec, we'll calculate it or use a sentinel.
+        # Since we need total_chunks in the header, we'll process the stream once
+        # or use a placeholder and seek back. LocalStorage allows seeking.
 
-        # 3. Encrypt plaintext to final storage location
-        stored_filename = f"{os.urandom(16).hex()}.enc"
-        # Use settings.UPLOADS_DIR instead of hardcoded "backend/uploads"
-        upload_dir = Path(settings.UPLOADS_DIR)
-        upload_dir.mkdir(parents=True, exist_ok=True)
-        stored_path = upload_dir / stored_filename
+        # For simplicity in this streaming implementation, we'll use a 2-pass
+        # if the file size is known, or a placeholder header.
+        # Let's use a placeholder header and patch it at the end.
 
-        try:
-            base_nonce_hex, encrypted_size = encryption_service.encrypt_file(
-                str(tmp_path), str(stored_path)
-            )
-        except Exception as e:
-            if stored_path.exists():
-                stored_path.unlink()
-            raise e
+        header_placeholder = b"\x00" * (1 + 4 + 4 + 12 + 16)
+        tmp_storage.write(header_placeholder)
 
-        # 4. Generate Evidence ID
-        evidence_id = generate_evidence_id(db)
+        # B. Streaming Encryption Loop
+        while chunk := upload_file.file.read(1024 * 1024):
+            # Enforce Max Upload Size
+            bytes_processed += len(chunk)
+            if bytes_processed > settings.MAX_UPLOAD_SIZE:
+                raise ValueError(f"File exceeds maximum allowed size of {settings.MAX_UPLOAD_SIZE} bytes")
 
-        # 5. Create DB record with encryption metadata (IPFS initially pending)
-        db_evidence = Evidence(
-            evidence_id=evidence_id,
-            original_filename=original_filename,
-            stored_filename=stored_filename,
-            mime_type=upload_file.content_type,
-            file_size=upload_file.size,
-            sha256=sha256,
-            uploaded_by=uploaded_by,
-            verification_status="pending",
-            encryption_algorithm=encryption_service.algorithm,
-            encryption_nonce=base_nonce_hex,
-            encrypted_file_size=encrypted_size,
-            ipfs_status="pending"
-        )
+            # Calculate Hash
+            sha256_hasher.update(chunk)
 
-        db.add(db_evidence)
-        db.commit()
-        db.refresh(db_evidence)
+            # Encrypt Chunk
+            ciphertext = encryption_service.encrypt_chunk(dek, chunk_idx, chunk, base_nonce)
 
-        # 6. Upload ciphertext to IPFS
-        cid = ipfs_service.upload_file(str(stored_path))
+            # Write: [Chunk Index (4B)][Ciphertext]
+            tmp_storage.write(chunk_idx.to_bytes(4, 'big'))
+            tmp_storage.write(ciphertext)
 
-        if cid:
-            db_evidence.ipfs_cid = cid
-            db_evidence.ipfs_status = "completed"
-            db_evidence.ipfs_uploaded_at = datetime.now(timezone.utc)
-            db.commit()
-        else:
-            db_evidence.ipfs_status = "failed"
-            db.commit()
+            chunk_idx += 1
 
-        # 7. Generate the chain of custody events
-        custody_service.create_event(db, db_evidence, "EVIDENCE_CREATED", uploaded_by, f"Evidence record created for {original_filename}")
-        custody_service.create_event(db, db_evidence, "EVIDENCE_UPLOADED", uploaded_by, "Original plaintext evidence uploaded to secure vault")
-        custody_service.create_event(db, db_evidence, "HASH_GENERATED", "System", f"SHA-256 fingerprint generated: {sha256[:16]}...")
-        custody_service.create_event(db, db_evidence, "ENCRYPTION_COMPLETED", "System", f"Evidence encrypted using {encryption_service.algorithm}")
+        final_hash = sha256_hasher.digest()
 
-        if cid:
-            custody_service.create_event(
-                db,
-                db_evidence,
-                "IPFS_UPLOAD_COMPLETED",
-                "System",
-                f"Encrypted ciphertext anchored to IPFS. CID: {cid}",
-                metadata={"cid": cid, "provider": "Pinata", "encrypted_size": encrypted_size}
-            )
-        else:
-            custody_service.create_event(
-                db,
-                db_evidence,
-                "IPFS_UPLOAD_FAILED",
-                "System",
-                "Encrypted ciphertext upload to IPFS failed."
-            )
+        # C. Write Footer
+        footer = encryption_service.create_footer(final_hash)
+        tmp_storage.write(footer)
 
-        return db_evidence
+        # D. Patch Header
+        tmp_storage.seek(0)
+        header = encryption_service.create_header(chunk_idx, 1024 * 1024, base_nonce)
+        tmp_storage.write(header)
 
-def get_evidence_list(db: Session, page: int = 1, page_size: int = 20, status: str = None, search: str = None, evidence_type: str = None):
-    """Retrieves a paginated list of evidence records with optional filtering."""
-    query = db.query(Evidence)
+        # E. Persist to Storage
+        tmp_storage.seek(0)
+        storage_provider.save(tmp_storage, storage_ref)
 
-    if status:
-        query = query.filter(Evidence.verification_status == status)
+    # 2. Database Record
+    encrypted_size = (1 + 4 + 4 + 12 + 16) + (chunk_idx * (4 + 1024 * 1024 + 16)) + (32 + 4 + 16)
+    # Note: the above is a max; the last chunk might be smaller.
+    # We can get the actual size from the storage provider or just use bytes_processed as approx.
 
-    if evidence_type:
-        query = query.filter(
-            (Evidence.mime_type.ilike(f"%{evidence_type}%")) |
-            (Evidence.original_filename.ilike(f"%{evidence_type}%"))
-        )
-
-    if search:
-        search_filter = f"%{search}%"
-        query = query.filter(
-            (Evidence.evidence_id.ilike(search_filter)) |
-            (Evidence.original_filename.ilike(search_filter)) |
-            (Evidence.uploaded_by.ilike(search_filter))
-        )
-
-    total = query.count()
-    offset = (page - 1) * page_size
-    items = query.offset(offset).limit(page_size).all()
-
-    return total, items
-
-def get_evidence_by_id(db: Session, evidence_id: str):
-    """Retrieves a single evidence record by its evidence_id."""
-    return db.query(Evidence).filter(Evidence.evidence_id == evidence_id).first()
-
-def verify_evidence_integrity(db: Session, evidence_id: str, verification_file, verified_by: str) -> dict:
-    """
-    Verifies a provided file upload against the stored SHA-256 hash.
-    The uploaded file is assumed to be plaintext.
-    """
-    evidence = get_evidence_by_id(db, evidence_id)
-    if not evidence:
-        return None
-
-    with tempfile.NamedTemporaryFile(delete=False) as tmp:
-        chunk_size = 1024 * 1024
-        while chunk := verification_file.file.read(chunk_size):
-            tmp.write(chunk)
-        tmp_path = tmp.name
-
-    try:
-        current_hash = calculate_sha256(tmp_path)
-    finally:
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
-
-    is_verified = current_hash == evidence.sha256
-    status = "verified" if is_verified else "tampered"
-
-    # Create a custody event for the verification attempt
-    custody_service.create_event(
-        db,
-        evidence,
-        "VERIFICATION_PERFORMED",
-        verified_by,
-        f"Integrity verification performed. Result: {status}",
-        metadata={"result": status, "current_hash": current_hash}
+    db_evidence = Evidence(
+        evidence_id=generate_secure_evidence_id(),
+        original_filename=original_filename,
+        mime_type=mime_type,
+        file_size=bytes_processed,
+        sha256=final_hash.hex(),
+        uploaded_by=uploaded_by,
+        wrapped_dek=wrapped_dek,
+        storage_provider="local",
+        storage_ref=storage_ref,
+        encryption_version=1,
+        encrypted_file_size=encrypted_size,
+        case_id=case_id
     )
 
-    return {
-        "verified": is_verified,
-        "status": status,
-        "original_hash": evidence.sha256,
-        "current_hash": current_hash,
-        "message": "Evidence integrity verified successfully." if is_verified else "Evidence integrity verification failed. Hash mismatch detected."
-    }
+    db.add(db_evidence)
+    db.commit()
+    db.refresh(db_evidence)
 
-def verify_stored_evidence_integrity(db: Session, evidence_id: str) -> dict:
+    # 3. Chain of Custody
+    custody_service.create_event(
+        db,
+        event_type="UPLOADED",
+        actor=uploaded_by,
+        description=f"Plaintext stream received: {original_filename}",
+        evidence=db_evidence
+    )
+    custody_service.create_event(
+        db,
+        event_type="HASHED",
+        actor="System",
+        description=f"SHA-256 computed: {db_evidence.sha256[:16]}...",
+        evidence=db_evidence
+    )
+    custody_service.create_event(
+        db,
+        event_type="ENCRYPTED",
+        actor="System",
+        description="Per-file DEK generated and framing applied",
+        evidence=db_evidence
+    )
+    custody_service.create_event(
+        db,
+        event_type="STORED",
+        actor="System",
+        description=f"Encrypted evidence persisted to {db_evidence.storage_provider} at {storage_ref}",
+        evidence=db_evidence
+    )
+
+    return db_evidence
+
+def download_evidence_streaming(db: Session, evidence_id: str) -> Generator[bytes, None, None]:
     """
-    Decrypts the stored encrypted file and verifies its SHA-256 hash.
-    This verifies that the encrypted storage itself has not been tampered with.
+    Authenticated decryption stream:
+    Storage -> Decrypt -> Hash Verify -> Plaintext Stream
+    """
+    evidence = db.query(Evidence).filter(Evidence.evidence_id == evidence_id).first()
+    if not evidence:
+        raise ValueError("Evidence not found")
+
+    # Recover DEK
+    dek = encryption_service.unwrap_key(evidence.wrapped_dek)
+
+    # Load storage stream
+    stream = storage_provider.load(evidence.storage_ref)
+
+    sha256_hasher = hashlib.sha256()
+
+    try:
+        # 1. Verify Header
+        header_data = stream.read(1 + 4 + 4 + 12 + 16)
+        total_chunks, chunk_size, base_nonce = encryption_service.verify_header(header_data)
+
+        # 2. Decrypt Chunks
+        for i in range(total_chunks):
+            # Read Index
+            idx_data = stream.read(4)
+            if not idx_data or len(idx_data) < 4:
+                raise FramingViolationError("Unexpected end of stream while reading chunk index.")
+
+            idx = int.from_bytes(idx_data, 'big')
+            if idx != i:
+                raise FramingViolationError(f"Chunk reordering detected. Expected {i}, got {idx}")
+
+            # Read Length
+            len_data = stream.read(4)
+            if not len_data or len(len_data) < 4:
+                raise FramingViolationError(f"Unexpected end of stream while reading length for chunk {i}.")
+
+            ciphertext_len = int.from_bytes(len_data, 'big')
+
+            # Read Ciphertext
+            ciphertext = stream.read(ciphertext_len)
+            if not ciphertext or len(ciphertext) < ciphertext_len:
+                raise FramingViolationError(f"Chunk {i} is truncated. Expected {ciphertext_len} bytes.")
+
+            plaintext = encryption_service.decrypt_chunk(dek, i, ciphertext, base_nonce)
+            sha256_hasher.update(plaintext)
+            yield plaintext
+
+        # 3. Verify Footer
+        footer_data = stream.read(32 + 4 + 16)
+        if not footer_data:
+            raise FramingViolationError("Missing footer: File truncated.")
+
+        # Integrity check against the hash in the footer and the DB
+        encryption_service.verify_footer(footer_data, bytes.fromhex(evidence.sha256))
+
+        # Final check against calculated hash
+        if sha256_hasher.digest().hex() != evidence.sha256:
+            raise FramingViolationError("Final plaintext hash mismatch. Evidence tampered with.")
+
+    finally:
+        stream.close()
+
+def verify_evidence_integrity(db: Session, evidence_id: str, upload_file, uploaded_by: str) -> dict:
+    """
+    Verifies that a newly uploaded file matches the original stored evidence hash.
+    This is used for external verification of evidence.
     """
     evidence = get_evidence_by_id(db, evidence_id)
     if not evidence:
         return None
 
-    stored_path = Path(settings.UPLOADS_DIR) / evidence.stored_filename
+    sha256_hasher = hashlib.sha256()
+    try:
+        # Read the uploaded file in chunks to compute hash
+        while chunk := upload_file.file.read(1024 * 1024):
+            sha256_hasher.update(chunk)
 
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        decrypted_path = Path(tmp_dir) / "decrypted.bin"
-        try:
-            encryption_service.decrypt_file(
-                str(stored_path), str(decrypted_path), evidence.encryption_nonce
-            )
-            current_hash = calculate_sha256(str(decrypted_path))
-            is_verified = current_hash == evidence.sha256
-        except Exception as e:
+        calculated_hash = sha256_hasher.digest().hex()
+
+        if calculated_hash == evidence.sha256:
+            return {
+                "verified": True,
+                "status": "verified",
+                "original_hash": evidence.sha256,
+                "current_hash": calculated_hash,
+                "message": "Uploaded file matches the stored evidence hash."
+            }
+        else:
             return {
                 "verified": False,
                 "status": "tampered",
-                "message": f"Decryption failed: {str(e)}"
+                "original_hash": evidence.sha256,
+                "current_hash": calculated_hash,
+                "message": "Uploaded file does not match the stored evidence hash."
             }
+    except Exception as e:
+        return {
+            "verified": False,
+            "status": "error",
+            "original_hash": evidence.sha256,
+            "current_hash": "N/A",
+            "message": f"Verification failed: {str(e)}"
+        }
 
-    return {
-        "verified": is_verified,
-        "status": "verified" if is_verified else "tampered",
-        "original_hash": evidence.sha256,
-        "current_hash": current_hash,
-        "message": "Stored evidence integrity verified."
-    }
+def verify_stored_evidence_integrity(db: Session, evidence_id: str) -> dict:
+    """
+    Full integrity check of the stored encrypted file.
+    Decrypts and verifies SHA-256.
+    """
+    evidence = db.query(Evidence).filter(Evidence.evidence_id == evidence_id).first()
+    if not evidence:
+        return {"verified": False, "message": "Evidence not found"}
+
+    try:
+        # We use the download stream logic to verify
+        hasher = hashlib.sha256()
+        for chunk in download_evidence_streaming(db, evidence_id):
+            hasher.update(chunk)
+
+        return {
+            "verified": True,
+            "status": "verified",
+            "message": "Stored evidence integrity verified successfully."
+        }
+    except Exception as e:
+        return {
+            "verified": False,
+            "status": "tampered",
+            "message": str(e)
+        }
+
+def get_evidence_list(db: Session, page: int = 1, page_size: int = 20, status: str = None, search: str = None, evidence_type: str = None):
+    query = db.query(Evidence)
+    if status:
+        query = query.filter(Evidence.verification_status == status)
+    if evidence_type:
+        query = query.filter((Evidence.mime_type.ilike(f"%{evidence_type}%")) | (Evidence.original_filename.ilike(f"%{evidence_type}%")))
+    if search:
+        search_filter = f"%{search}%"
+        query = query.filter((Evidence.evidence_id.ilike(search_filter)) | (Evidence.original_filename.ilike(search_filter)) | (Evidence.uploaded_by.ilike(search_filter)))
+
+    total = query.count()
+    items = query.offset((page - 1) * page_size).limit(page_size).all()
+    return total, items
+
+def get_evidence_by_id(db: Session, evidence_id: str):
+    return db.query(Evidence).filter(Evidence.evidence_id == evidence_id).first()

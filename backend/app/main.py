@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from app.api import evidence, auth, users, zk
+from app.api import evidence, auth, users, zk, cases
 from app.core.config import settings
 from app.db.database import get_db, SessionLocal
 from app.db.seed import seed_iam
@@ -27,6 +27,7 @@ app.include_router(auth.router)
 app.include_router(evidence.router)
 app.include_router(users.router)
 app.include_router(zk.router)
+app.include_router(cases.router)
 
 # Auto-seed IAM data on startup
 @app.on_event("startup")

@@ -26,6 +26,16 @@ class Settings(BaseSettings):
         validation_alias="LEXVAULT_JWT_SECRET",
     )
 
+    # Blockchain configuration
+    ETH_RPC_URL: str = Field(
+        default="https://sepolia.infura.io/v3/YOUR_INFURA_KEY",
+        validation_alias="ETH_RPC_URL",
+    )
+    MULTISIG_CONTRACT_ADDRESS: str = Field(
+        default="0x0000000000000000000000000000000000000000",
+        validation_alias="MULTISIG_CONTRACT_ADDRESS",
+    )
+
     LEXVAULT_JWT_ALGORITHM: str = Field(
         default="HS256",
         validation_alias="LEXVAULT_JWT_ALGORITHM",

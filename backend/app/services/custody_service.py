@@ -2,6 +2,7 @@ import hashlib
 import json
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
+import uuid
 from sqlalchemy.orm import Session
 from app.db.models import CustodyEvent, Evidence
 
@@ -9,19 +10,31 @@ from app.db.models import CustodyEvent, Evidence
 from app.services.custody_hash import calculate_custody_hash
 
 class CustodyService:
-    def create_event(self, db: Session, evidence: Evidence, event_type: str, actor: str, description: str, metadata: Optional[Dict[str, Any]] = None) -> CustodyEvent:
-        """Creates a new custody event, linking it to the previous event's hash."""
-        last_event = db.query(CustodyEvent).filter(
-            CustodyEvent.evidence_id == evidence.id
-        ).order_by(CustodyEvent.id.desc()).first()
-
-        previous_hash = last_event.event_hash if last_event else None
+    def create_event(self, db: Session, event_type: str, actor: str, description: str, evidence: Optional[Evidence] = None, case_id: Optional[uuid.UUID] = None, metadata: Optional[Dict[str, Any]] = None) -> CustodyEvent:
+        """Creates a new custody event, linking it to the previous event's hash.
+        Can be linked to either a specific piece of evidence or a case.
+        """
+        previous_hash = None
+        if evidence:
+            last_event = db.query(CustodyEvent).filter(
+                CustodyEvent.evidence_id == evidence.id
+            ).order_by(CustodyEvent.id.desc()).first()
+            previous_hash = last_event.event_hash if last_event else None
+        elif case_id:
+            last_event = db.query(CustodyEvent).filter(
+                CustodyEvent.case_id == case_id
+            ).order_by(CustodyEvent.id.desc()).first()
+            previous_hash = last_event.event_hash if last_event else None
 
         # Use timezone-aware UTC datetime object
         timestamp = datetime.now(timezone.utc)
 
+        # Calculate hash based on what's available
+        # We use the evidence_id if available, otherwise the case_id
+        id_for_hash = evidence.evidence_id if evidence else str(case_id)
+
         event_hash = calculate_custody_hash(
-            evidence_id=evidence.evidence_id,
+            evidence_id=id_for_hash,
             event_type=event_type,
             actor=actor,
             timestamp=timestamp,
@@ -31,7 +44,8 @@ class CustodyService:
         )
 
         new_event = CustodyEvent(
-            evidence_id=evidence.id,
+            evidence_id=evidence.id if evidence else None,
+            case_id=case_id,
             event_type=event_type,
             actor=actor,
             timestamp=timestamp,

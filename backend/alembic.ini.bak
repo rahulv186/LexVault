@@ -1,0 +1,41 @@
+[alembic]
+script_location = alembic
+prepend_sys_path = false
+version_locations = alembic/versions
+sqlalchemy.url = postgresql://postgres:postgres@localhost:5432/lexvault_clean
+
+[loggers]
+keys = root,sqlalchemy,alembic
+
+[handlers]
+keys = console
+console = StreamHandler
+
+[formatters]
+keys = generic
+generic = GenericFormatter
+
+[setup_loggers]
+drivers = file
+
+[logger_root]
+level = WARN
+handlers = console
+
+[logger_sqlalchemy]
+level = WARN
+handlers = console
+qualname = sqlalchemy.engine
+
+[logger_alembic]
+level = INFO
+handlers = console
+qualname = alembic
+
+[handler_console]
+class = StreamHandler
+args = (sys.stdout,)
+formatter = generic
+
+[formatter_generic]
+format = %(levelname)-5.5s [%(name)s] %(message)s

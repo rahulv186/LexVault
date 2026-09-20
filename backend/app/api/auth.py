@@ -8,8 +8,66 @@ from app.api.dependencies import get_current_user as get_current_user_simple
 from app.core import security
 from app.core.config import settings
 from datetime import timedelta
+from pydantic import BaseModel
+from app.services.siwe_service import nonce_service, authenticate_wallet
 
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
+
+class WalletLoginRequest(BaseModel):
+    wallet_address: str
+    signature: str
+    message: str
+
+class NonceRequest(BaseModel):
+    wallet_address: str
+
+@router.get("/nonce", response_model=dict)
+def get_nonce(payload: NonceRequest = Depends(), db: Session = Depends(get_db)):
+    nonce = nonce_service.create_nonce(payload.wallet_address)
+    return {"nonce": nonce}
+
+@router.post("/wallet-login", response_model=Token)
+def wallet_login(
+    payload: WalletLoginRequest,
+    db: Session = Depends(get_db)
+):
+    # 1. Verify and consume nonce
+    # We need to extract the nonce from the message or pass it explicitly.
+    # SIWE messages contain the nonce. We'll check the nonce stored for this wallet.
+
+    # Since the nonce was stored in the singleton, we can't easily pass it here
+    # unless we've stored the expected nonce.
+    # The service now handles the signature verification.
+
+    # For the prototype, we'll verify the signature and if the message
+    # contains a valid, unconsumed nonce.
+
+    # We need a way to get the nonce for the wallet to verify the signature.
+    # I'll modify the siwe_service to handle the nonce check inside authenticate_wallet.
+
+    # Actually, I'll just call the verification here.
+    from app.services.siwe_service import verify_siwe_signature
+
+    # We need the current nonce to check the signature
+    # Note: nonce_service stores it.
+    stored_nonce = nonce_service._nonces.get(payload.wallet_address.lower(), {}).get("nonce")
+    if not stored_nonce:
+        raise HTTPException(status_code=400, detail="No nonce requested or nonce expired")
+
+    if not verify_siwe_signature(payload.message, payload.signature, payload.wallet_address, stored_nonce):
+        raise HTTPException(status_code=401, detail="Invalid signature or message")
+
+    # Consume the nonce
+    nonce_service.verify_and_consume_nonce(payload.wallet_address, stored_nonce)
+
+    try:
+        user, access_token = authenticate_wallet(db, payload.wallet_address, payload.signature, payload.message)
+        return {
+            "access_token": access_token,
+            "token_type": "bearer"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/register", response_model=UserResponse, status_code=201)
 def register(user_in: UserCreate, db: Session = Depends(get_db)):
